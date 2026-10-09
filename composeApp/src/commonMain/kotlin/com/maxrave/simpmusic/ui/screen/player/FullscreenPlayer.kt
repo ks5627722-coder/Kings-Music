@@ -53,6 +53,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.input.pointer.pointerInput
@@ -85,6 +87,9 @@ import com.maxrave.simpmusic.ui.icon.SkipNext
 import com.maxrave.simpmusic.ui.icon.SkipPrevious
 import com.maxrave.simpmusic.ui.icon.Subtitles
 import com.maxrave.simpmusic.ui.icon.SubtitlesOff
+import com.maxrave.simpmusic.ui.theme.currentTheme
+import com.maxrave.simpmusic.ui.theme.graphitePrimary
+import com.maxrave.simpmusic.ui.theme.luxePrimary
 import com.maxrave.simpmusic.ui.theme.overlay
 import com.maxrave.simpmusic.ui.theme.typo
 import com.maxrave.simpmusic.viewModel.SharedViewModel
@@ -371,6 +376,7 @@ fun FullscreenPlayer(
                                 }
                             },
                         )
+                        // ============ PREMIUM PLAYBACK CONTROLS ============
                         Row(
                             Modifier
                                 .align(Alignment.Center)
@@ -378,15 +384,17 @@ fun FullscreenPlayer(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
+                            // ===== PREVIOUS BUTTON =====
                             FilledTonalIconButton(
                                 colors =
                                     IconButtonDefaults.iconButtonColors().copy(
-                                        containerColor = Color.Transparent,
+                                        containerColor = Color.White.copy(alpha = 0.10f),
                                     ),
                                 modifier =
                                     Modifier
                                         .size(48.dp)
                                         .aspectRatio(1f)
+                                        .shadow(6.dp, CircleShape, clip = false)
                                         .clip(
                                             CircleShape,
                                         ),
@@ -404,15 +412,18 @@ fun FullscreenPlayer(
                                             .size(36.dp),
                                 )
                             }
+
+                            // ===== REPLAY 5 BUTTON =====
                             FilledTonalIconButton(
                                 colors =
                                     IconButtonDefaults.iconButtonColors().copy(
-                                        containerColor = Color.Transparent,
+                                        containerColor = Color.White.copy(alpha = 0.10f),
                                     ),
                                 modifier =
                                     Modifier
                                         .size(48.dp)
                                         .aspectRatio(1f)
+                                        .shadow(6.dp, CircleShape, clip = false)
                                         .clip(
                                             CircleShape,
                                         ),
@@ -429,6 +440,21 @@ fun FullscreenPlayer(
                                             .size(36.dp),
                                 )
                             }
+
+                            // ===== PLAY/PAUSE BUTTON (PREMIUM 3D GLASS) =====
+                            val playButtonBrush = Brush.radialGradient(
+                                colors = when (currentTheme) {
+                                    "LUXE_GOLDEN" -> listOf(
+                                        luxePrimary.copy(alpha = 0.9f),
+                                        luxePrimary.copy(alpha = 0.4f),
+                                    )
+                                    "CHRONO_GRAPHITE" -> listOf(
+                                        graphitePrimary.copy(alpha = 0.7f),
+                                        Color(0xFF2A2A2E),
+                                    )
+                                    else -> listOf(Color.White.copy(alpha = 0.25f), Color.White.copy(alpha = 0.05f))
+                                }
+                            )
                             FilledTonalIconButton(
                                 colors =
                                     IconButtonDefaults.iconButtonColors().copy(
@@ -436,8 +462,10 @@ fun FullscreenPlayer(
                                     ),
                                 modifier =
                                     Modifier
-                                        .size(64.dp)
+                                        .size(72.dp)
                                         .aspectRatio(1f)
+                                        .shadow(16.dp, CircleShape, clip = false)
+                                        .background(playButtonBrush, CircleShape)
                                         .clip(
                                             CircleShape,
                                         ),
@@ -467,15 +495,18 @@ fun FullscreenPlayer(
                                     }
                                 }
                             }
+
+                            // ===== FORWARD 5 BUTTON =====
                             FilledTonalIconButton(
                                 colors =
                                     IconButtonDefaults.iconButtonColors().copy(
-                                        containerColor = Color.Transparent,
+                                        containerColor = Color.White.copy(alpha = 0.10f),
                                     ),
                                 modifier =
                                     Modifier
                                         .size(48.dp)
                                         .aspectRatio(1f)
+                                        .shadow(6.dp, CircleShape, clip = false)
                                         .clip(
                                             CircleShape,
                                         ),
@@ -492,15 +523,18 @@ fun FullscreenPlayer(
                                             .size(36.dp),
                                 )
                             }
+
+                            // ===== NEXT BUTTON =====
                             FilledTonalIconButton(
                                 colors =
                                     IconButtonDefaults.iconButtonColors().copy(
-                                        containerColor = Color.Transparent,
+                                        containerColor = Color.White.copy(alpha = 0.10f),
                                     ),
                                 modifier =
                                     Modifier
                                         .size(48.dp)
                                         .aspectRatio(1f)
+                                        .shadow(6.dp, CircleShape, clip = false)
                                         .clip(
                                             CircleShape,
                                         ),
@@ -519,6 +553,7 @@ fun FullscreenPlayer(
                                 )
                             }
                         }
+                        // ============ BOTTOM SECTION (Progress + Timestamps) ============
                         Column(
                             modifier =
                                 Modifier
@@ -583,9 +618,6 @@ fun FullscreenPlayer(
                                 }
                                 CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
                                     Slider(
-                                        // Fraction, not 0..100 — see the note in NowPlayingScreen:
-                                        // material3 alpha25 drops valueRange on its
-                                        // binary-compatibility overload.
                                         value = sliderValue / 100f,
                                         onValueChange = { value ->
                                             isSliding = true
@@ -648,7 +680,6 @@ fun FullscreenPlayer(
                                     )
                                 }
                             }
-                            // /
                             Box(
                                 modifier =
                                     Modifier
@@ -668,7 +699,6 @@ fun FullscreenPlayer(
                                     )
                                     Spacer(Modifier.width(4.dp))
                                     Text(
-                                        // LIVE stands on its own: there is no elapsed time in front of it to divide from.
                                         text = if (timelineState.isLive) timelineState.lengthLabel() else " / ${timelineState.lengthLabel()}",
                                         style = typo().bodySmall,
                                     )

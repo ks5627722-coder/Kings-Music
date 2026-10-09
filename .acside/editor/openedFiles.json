@@ -1,0 +1,35 @@
+{
+  "allFiles": [
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/SimpMusic/.github/ISSUE_TEMPLATE/bug_report.yml",
+      "selection": {
+        "end": {
+          "column": 0,
+          "index": 0,
+          "line": 0
+        },
+        "start": {
+          "column": 0,
+          "index": 0,
+          "line": 0
+        }
+      }
+    },
+    {
+      "file": "/storage/emulated/0/AndroidIDEProjects/SimpMusic/LICENSE",
+      "selection": {
+        "end": {
+          "column": 36,
+          "index": 1051,
+          "line": 22
+        },
+        "start": {
+          "column": 36,
+          "index": 1051,
+          "line": 22
+        }
+      }
+    }
+  ],
+  "selectedFile": "/storage/emulated/0/AndroidIDEProjects/SimpMusic/LICENSE"
+}

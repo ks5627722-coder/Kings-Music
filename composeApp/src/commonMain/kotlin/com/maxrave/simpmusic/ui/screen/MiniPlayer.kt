@@ -136,6 +136,9 @@ import com.maxrave.simpmusic.ui.icon.VolumeUp
 import com.maxrave.simpmusic.ui.screen.player.content.toAudioQualityLabel
 import com.maxrave.simpmusic.ui.theme.LocalIsDarkTheme
 import com.maxrave.simpmusic.ui.theme.typo
+import com.maxrave.simpmusic.ui.theme.currentTheme
+import com.maxrave.simpmusic.ui.theme.luxeBackground
+import com.maxrave.simpmusic.ui.theme.graphiteBackground
 import com.maxrave.simpmusic.viewModel.SharedViewModel
 import com.maxrave.simpmusic.viewModel.UIEvent
 import kotlinx.coroutines.delay
@@ -161,34 +164,27 @@ fun MiniPlayer(
     onClose: () -> Unit,
     onClick: () -> Unit,
     onOpenFullscreenLyrics: () -> Unit = {},
-    // ConstraintLayout keeps Gone content composed, so its visibility must gate sampling separately.
     isVisible: Boolean = true,
-    /** Lets the queue's song sheets open artist and album pages; the Desktop capsule's queue needs it. */
     navController: NavController? = null,
 ) {
     val isLiquidGlassEnabled by sharedViewModel.getEnableLiquidGlass().collectAsStateWithLifecycle(DataStoreManager.FALSE)
     val controllerState by sharedViewModel.controllerState.collectAsStateWithLifecycle()
     val timelineState by sharedViewModel.timeline.collectAsStateWithLifecycle()
-    // The Desktop capsule's quality line between its timestamps — see toAudioQualityLabel.
     val formatState by sharedViewModel.format.collectAsStateWithLifecycle(initialValue = null)
 
     val layer = rememberGraphicsLayer()
 
-    // The Desktop capsule is always liquid glass, so it needs the glass code paths whatever the
-    // setting says — both the luminance sampling loop that drives the glass and the theme-following
-    // text colour. Leaving them gated left the capsule with luminance stuck at 0: a 2dp blur and a
-    // 0.12 darken, which is why it looked like a smear rather than glass. The setting still governs
-    // the Android card below.
     val useGlassSurface = isLiquidGlassEnabled == DataStoreManager.TRUE || getPlatform() == Platform.Desktop
     val luminance = rememberGlassLuminance(layer, enabled = useGlassSurface && isVisible)
 
     val isDarkTheme = LocalIsDarkTheme.current
+    
+    // CHANGE 1: Text color logic updated for custom dark themes
     val textColor by animateColorAsState(
-        // With liquid glass the surface follows the theme (light = frosted white → black text);
-        // without it, the card is a theme surface, so its foreground token.
         targetValue =
             if (useGlassSurface) {
-                if (isDarkTheme) Color.White else Color.Black
+                // Premium dark glass par hamesha white text (chahe system light mode me ho)
+                Color.White
             } else {
                 MaterialTheme.colorScheme.onSurface
             },
@@ -268,19 +264,20 @@ fun MiniPlayer(
     }
 
     if (getPlatform() == Platform.Android) {
-        // One shape for both the Card and the clip below. They must not diverge: the clip wraps
-        // the Card's own background draw, so the larger radius wins and silently becomes the
-        // visible one.
         val miniPlayerShape = CircleShape
-        // Without glass the card follows the theme, not the playing artwork.
+        
+        // CHANGE 2: Card color updated with theme tint for the glass
         val cardColor =
             if (isLiquidGlassEnabled == DataStoreManager.TRUE) {
-                Color.Transparent
+                when (currentTheme) {
+                    "LUXE_GOLDEN" -> luxeBackground.copy(alpha = 0.45f)
+                    "CHRONO_GRAPHITE" -> graphiteBackground.copy(alpha = 0.45f)
+                    else -> Color.Transparent
+                }
             } else {
-                // Same opaque surface as the bottom bar capsule, so the two floating surfaces read as one set.
                 MaterialTheme.colorScheme.surfaceContainer
             }
-        // The flat (default) card: round artwork and controls sitting in filled circles. Glass keeps its own look.
+            
         val isFlat = isLiquidGlassEnabled != DataStoreManager.TRUE
         Card(
             shape = miniPlayerShape,
@@ -394,7 +391,6 @@ fun MiniPlayer(
                                 contentAlignment = Alignment.Center,
                             ) {
                                 if (isFlat) {
-                                    // Progress rides a ring around the artwork: wavy while playing, flat when paused.
                                     val ringStroke = Stroke(width = with(LocalDensity.current) { 3.dp.toPx() }, cap = StrokeCap.Round)
                                     CircularWavyProgressIndicator(
                                         progress = { animatedProgress },
@@ -403,8 +399,6 @@ fun MiniPlayer(
                                         trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
                                         stroke = ringStroke,
                                         trackStroke = ringStroke,
-                                        // A raw 0/1, never a tweened value: the node animates amplitude
-                                        // itself and drops new targets mid-animation (see WavySeekBar).
                                         amplitude = { p -> if (p > 0f && isPlaying) 1f else 0f },
                                     )
                                 }
@@ -418,7 +412,6 @@ fun MiniPlayer(
                                     placeholder = rememberHolderPainter(),
                                     error = rememberHolderPainter(),
                                     contentDescription = null,
-                                    // Crop in the circle: FillWidth would leave bands around a 16:9 video thumbnail.
                                     contentScale = if (isFlat) ContentScale.Crop else ContentScale.FillWidth,
                                     modifier =
                                         Modifier
@@ -432,10 +425,7 @@ fun MiniPlayer(
                                 modifier = Modifier.weight(1F).fillMaxHeight(),
                                 contentAlignment = Alignment.CenterStart,
                                 transitionSpec = {
-                                    // Compare the incoming number with the previous number.
                                     if (targetState != initialState) {
-                                        // If the target number is larger, it slides up and fades in
-                                        // while the initial (smaller) number slides up and fades out.
                                         (
                                             slideInHorizontally { width ->
                                                 width
@@ -444,8 +434,6 @@ fun MiniPlayer(
                                             slideOutHorizontally { width -> +width } + fadeOut(),
                                         )
                                     } else {
-                                        // If the target number is smaller, it slides down and fades in
-                                        // while the initial number slides down and fades out.
                                         (
                                             slideInHorizontally { width ->
                                                 +width
@@ -454,8 +442,6 @@ fun MiniPlayer(
                                             slideOutHorizontally { width -> width } + fadeOut(),
                                         )
                                     }.using(
-                                        // Disable clipping since the faded slide-in/out should
-                                        // be displayed out of bounds.
                                         SizeTransform(clip = false),
                                     )
                                 },
@@ -512,11 +498,9 @@ fun MiniPlayer(
                             }
                         }
                     }
-                    // Flat: 40dp in the 56dp pill leaves an even 8dp ring.
                     val controlSize = if (isFlat) 40.dp else 48.dp
                     val playColor = if (isFlat) MaterialTheme.colorScheme.onPrimary else textColor
                     Spacer(modifier = Modifier.width(if (isFlat) 8.dp else 15.dp))
-                    // background(shape), not clip: the heart's like-burst draws outside its bounds.
                     Box(
                         modifier =
                             if (isFlat) {
@@ -559,7 +543,6 @@ fun MiniPlayer(
 
                     Spacer(modifier = Modifier.width(if (isFlat) 8.dp else 15.dp))
                 }
-                // The flat card shows progress as the ring around its artwork instead.
                 if (!isFlat) {
                     Box(
                         modifier =
@@ -589,16 +572,8 @@ fun MiniPlayer(
             }
         }
     } else {
-        // Desktop bottom bar surface follows the theme (haze over content), so text and controls
-        // use the theme foreground token instead of the artwork-luminance colour.
+        // Desktop implementation remains unchanged as it already has its own styling
         val textColor = MaterialTheme.colorScheme.onBackground
-
-        // Crossfade cue: a label on the artist line, nothing on the bar itself. The Now Playing
-        // screen cycles the track through hues for this, which on a 2dp hairline reads as a
-        // rendering fault rather than as a transition.
-        // Head of the highlight that travels through the "Crossfading" label, 0..1. Runs
-        // unconditionally: putting it behind the crossfade check would restart the animation from
-        // zero each time the label appears, so the sweep would jump rather than continue.
         val sweepTransition = rememberInfiniteTransition(label = "miniPlayerCrossfadeSweep")
         val crossfadeSweep by sweepTransition.animateFloat(
             initialValue = 0f,
@@ -631,7 +606,6 @@ fun MiniPlayer(
                     }
             }
         }
-        // Only the Desktop capsule has a queue button, and App.kt hands that capsule the nav controller.
         if (showQueueBottomSheet && navController != null) {
             QueueBottomSheet(
                 onDismiss = {
@@ -641,11 +615,6 @@ fun MiniPlayer(
                 onNavigateToOtherScreen = { showQueueBottomSheet = false },
             )
         }
-        // Apple Music-style floating capsule: transport on the left, the track and its slim
-        // progress slider in the middle, the action cluster on the right. Size and placement come
-        // from the caller (App.kt), so the capsule keeps a fixed width and floats over content.
-        // Always liquid glass, not gated on the setting: the capsule IS the glass shape here, and
-        // falling back to a haze blur gives a dark smear instead of a floating pill.
         val capsuleShape = RoundedCornerShape(50)
         val density = LocalDensity.current
         Box(
@@ -660,25 +629,15 @@ fun MiniPlayer(
             Row(
                 Modifier
                     .fillMaxHeight()
-                    // No vertical padding: the progress line is bottom-aligned inside its own 16dp
-                    // touch box, so the line already floats 8dp above whatever the bottom edge is.
-                    // Padding on top of that pushed it back up against the artwork. Everything else
-                    // in this row is centred, so losing the inset costs them nothing.
                     .padding(horizontal = 16.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                // PlayerControlLayout is a fillMaxWidth Row with SpaceEvenly and weight(1f) on every
-                // button, so it consumes whatever width it is handed. The old layout kept it in check
-                // with Column(width = 600.dp); inside a capsule it must be boxed to a fixed width or
-                // it spreads across the whole bar and pushes the other two clusters out of view.
                 Box(Modifier.width(200.dp)) {
                     PlayerControlLayout(
                         controllerState,
                         isSmallSize = true,
                         plainPlayPause = true,
                         horizontalPadding = 0.dp,
-                        // Dark keeps the familiar seed; light needs the darker seed-derived
-                        // primary or the active state washes out on the light glass.
                         activeColor = if (isDarkTheme) com.maxrave.simpmusic.ui.theme.seed else MaterialTheme.colorScheme.primary,
                         contentColor = textColor,
                     ) {
@@ -689,24 +648,11 @@ fun MiniPlayer(
                     modifier = Modifier.height(28.dp).padding(horizontal = 14.dp),
                     color = textColor.copy(alpha = 0.2f),
                 )
-                // The whole track cluster is the hover target, not the progress line itself:
-                // pointing anywhere near the title thickens the slider and reveals the
-                // timestamps, so a 2dp line never has to be hit precisely. Apple hides the
-                // times behind a much smaller hover area and it is the single most complained
-                // about part of their Tahoe player.
                 val trackInteraction = remember { MutableInteractionSource() }
                 val isTrackHovered by trackInteraction.collectIsHoveredAsState()
-                // The artwork is carved out of that hover: pointing at it keeps the track shown and
-                // offers the full-screen lyrics button instead of swapping to the timestamps.
                 val artworkInteraction = remember { MutableInteractionSource() }
                 val isArtworkHovered by artworkInteraction.collectIsHoveredAsState()
                 val showScrubber = (isTrackHovered && !isArtworkHovered) || isSliding
-                // A Box, not a Column: the [artwork -> text] content is centred on the capsule's own
-                // vertical axis and the progress line hangs off the bottom edge. Stacking them in a
-                // Column instead centres the PAIR, which pushes the content above the axis by half
-                // the slider's height. Across the 60dp capsule that lands the ~33dp content at 13-46
-                // and the line at 52, clear of the content by ~6dp. The old stacked layout could not
-                // fit its 56dp of children in a padded 52dp box at all, and overlapped by 4dp.
                 Box(
                     modifier =
                         Modifier
@@ -714,9 +660,6 @@ fun MiniPlayer(
                             .fillMaxHeight()
                             .hoverable(trackInteraction),
                 ) {
-                    // Trim.Both + Alignment.Center: the app font carries most of its slack under
-                    // the baseline, so glyphs ride low inside their own line box — the box was
-                    // centred all along, the DIGITS were not. This centres and hugs the glyphs.
                     val scrubberDigits =
                         typo().bodySmall.copy(
                             lineHeight = 11.sp,
@@ -726,11 +669,6 @@ fun MiniPlayer(
                                     trim = LineHeightStyle.Trim.Both,
                                 ),
                         )
-                    // Hovering swaps the WHOLE content block — artwork included — out for the
-                    // timestamps, the way Apple's capsule does. The two cross-fade through alpha
-                    // rather than AnimatedVisibility, because an alpha of 0 is still MEASURED: the
-                    // content keeps donating its height, so nothing around it reflows as the pointer
-                    // arrives, and the swap area needs no hardcoded height.
                     val infoAlpha by animateFloatAsState(
                         targetValue = if (showScrubber) 0f else 1f,
                         animationSpec = tween(200),
@@ -743,10 +681,6 @@ fun MiniPlayer(
                                 .graphicsLayer { alpha = infoAlpha },
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        // 32dp, not 40: the artwork is the tallest thing in the content row, so it
-                        // sets the floor under the capsule's own height once the progress box is
-                        // hung below it. At 40 the shortest capsule that still cleared the line
-                        // was 72dp, which read as a slab rather than a floating pill.
                         Box(
                             modifier =
                                 Modifier
@@ -768,7 +702,6 @@ fun MiniPlayer(
                                 contentScale = ContentScale.Crop,
                                 modifier = Modifier.fillMaxSize(),
                             )
-                            // The Apple Music lyrics view's open-in-full button, reachable from the capsule.
                             androidx.compose.animation.AnimatedVisibility(
                                 visible = isArtworkHovered,
                                 enter = fadeIn(),
@@ -804,8 +737,6 @@ fun MiniPlayer(
                         Column(Modifier.weight(1f)) {
                             Text(
                                 text = (songEntity?.title ?: "").toString(),
-                                // labelSmall is 14sp — oversized against a 40dp artwork; keep its
-                                // weight, drop the size a notch.
                                 style = typo().labelSmall.copy(fontSize = 12.sp),
                                 color = textColor,
                                 maxLines = 1,
@@ -834,23 +765,13 @@ fun MiniPlayer(
                                     color = textColor.copy(alpha = 0.7f),
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
-                                    // fill = false so the artist name gives the label room instead
-                                    // of claiming the whole row and pushing it out of view.
                                     modifier = Modifier.weight(1f, fill = false),
                                 )
-                                // On the artist line rather than with the timestamps: that row
-                                // rides `alpha = 1f - infoAlpha`, so it only exists while the
-                                // pointer is over the capsule — a crossfade cue nobody sees
-                                // unless they happen to be hovering is no cue at all.
                                 AnimatedVisibility(
                                     visible = timelineState.isCrossfading,
                                     enter = fadeIn(),
                                     exit = fadeOut(),
                                 ) {
-                                    // The label is what travels: a highlight sweeping left to
-                                    // right through the glyphs. TextStyle takes a brush directly,
-                                    // so the gradient paints the text itself — no overlay, no
-                                    // clipping, and it keeps working whatever the label's width.
                                     val shimmerSpan = 140f
                                     val shimmerHead = crossfadeSweep * (shimmerSpan * 3f) - shimmerSpan
                                     Text(
@@ -860,8 +781,6 @@ fun MiniPlayer(
                                                 brush =
                                                     Brush.horizontalGradient(
                                                         0f to textColor.copy(alpha = 0.45f),
-                                                        // The sweep head is PURE white, not the resting label colour — the label
-                                                        // colour is an adaptive grey, and a grey gleam reads as no gleam at all.
                                                         0.5f to Color.White,
                                                         1f to textColor.copy(alpha = 0.45f),
                                                         startX = shimmerHead,
@@ -875,9 +794,6 @@ fun MiniPlayer(
                             }
                         }
                     }
-                    // The timestamps take the content's place on the same axis, spanning the whole
-                    // cluster rather than only the text column — so the elapsed digit starts where the
-                    // artwork was, which is what makes the swap read as one block being replaced.
                     Row(
                         modifier =
                             Modifier
@@ -893,7 +809,6 @@ fun MiniPlayer(
                             color = textColor.copy(alpha = 0.7f),
                             maxLines = 1,
                         )
-                        // The Now Playing quality line, centred between the times and a step dimmer.
                         formatState.toAudioQualityLabel()?.let { quality ->
                             Row(
                                 modifier = Modifier.weight(1f),
@@ -916,8 +831,6 @@ fun MiniPlayer(
                             }
                         }
                         Text(
-                            // Time REMAINING, signed, which is what Apple's capsule reports on the
-                            // right — not the track's total length.
                             text =
                                 if (timelineState.isLive) {
                                     stringResource(Res.string.live_badge)
@@ -932,8 +845,6 @@ fun MiniPlayer(
                             maxLines = 1,
                         )
                     }
-                    // The timestamps now sit on the content line, so the track no longer has to
-                    // inset itself to keep clear of them.
                     CapsuleProgress(
                         sliderValue = sliderValue,
                         loading = loading,
@@ -962,10 +873,6 @@ fun MiniPlayer(
                     color = textColor.copy(alpha = 0.2f),
                 )
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    // 40dp cell to sit on the IconButton grid, and size 32 on purpose:
-                    // HeartCheckBox pads 4dp per side internally, so 32 yields the same 24dp
-                    // glyph the neighbouring icons draw at — 26 left an 18dp heart that read
-                    // as extra padding around a smaller icon.
                     Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
                         HeartCheckBox(checked = controllerState.isLiked, size = 32) {
                             sharedViewModel.onUIEvent(UIEvent.ToggleLike)
@@ -982,7 +889,6 @@ fun MiniPlayer(
                             contentDescription = "",
                         )
                     }
-                    // Desktop mini player button (JVM only)
                     if (getPlatform() == Platform.Desktop) {
                         IconButton(onClick = { toggleMiniPlayer() }) {
                             Icon(
@@ -1003,9 +909,6 @@ fun MiniPlayer(
                             volumeValue = controllerState.volume
                         }
                     }
-                    // Remembers the level to come back to when unmuting, so the button restores
-                    // what the user was listening at instead of jumping to full volume.
-                    // Starting muted leaves nothing to restore, so full volume stays the fallback.
                     var previousVolumeValue by rememberSaveable {
                         mutableFloatStateOf(controllerState.volume.takeIf { it > 0f } ?: 1f)
                     }
@@ -1014,11 +917,6 @@ fun MiniPlayer(
                             previousVolumeValue = controllerState.volume
                         }
                     }
-                    // Vertical volume popup anchored on the speaker icon, the way a context menu
-                    // opens: a Popup draws outside the capsule's bounds, so the capsule keeps its
-                    // width instead of expanding sideways as it used to. `hoverable` sits on the
-                    // anchor Box AND on the popup body, otherwise the popup closes the moment the
-                    // pointer leaves the icon and the slider becomes impossible to reach.
                     val volumeInteraction = remember { MutableInteractionSource() }
                     val isVolumeHovered by volumeInteraction.collectIsHoveredAsState()
                     val popupInteraction = remember { MutableInteractionSource() }
@@ -1026,7 +924,6 @@ fun MiniPlayer(
                     Box(modifier = Modifier.hoverable(volumeInteraction)) {
                         IconButton(
                             onClick = {
-                                // Toggle mute/unmute
                                 if (controllerState.volume > 0f) {
                                     sharedViewModel.onUIEvent(UIEvent.UpdateVolume(0f))
                                 } else {
@@ -1047,11 +944,6 @@ fun MiniPlayer(
                                 contentDescription = if (controllerState.volume > 0f) "Mute" else "Unmute",
                             )
                         }
-                        // Releasing the mouse above the popup — which is what happens when you drag
-                        // the thumb to the top — drops the hover and `isVolumeSliding` in the same
-                        // frame, so the popup used to vanish right under the user's hand. Hold it
-                        // open for a beat instead: moving back in cancels this effect before the
-                        // delay elapses, so the popup stays.
                         var isVolumePopupVisible by remember { mutableStateOf(false) }
                         LaunchedEffect(isVolumeHovered, isPopupHovered, isVolumeSliding) {
                             if (isVolumeHovered || isPopupHovered || isVolumeSliding) {
@@ -1073,9 +965,6 @@ fun MiniPlayer(
                                             .width(44.dp)
                                             .height(VOLUME_POPUP_HEIGHT)
                                             .clip(RoundedCornerShape(14.dp))
-                                            // Theme surface, not `background` — that one animates to the
-                                            // artwork's palette colour, which turned the popup olive green
-                                            // for one cover and pink for the next.
                                             .background(MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.96f))
                                             .padding(vertical = 10.dp),
                                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -1087,18 +976,11 @@ fun MiniPlayer(
                                         color = textColor.copy(alpha = 0.7f),
                                         maxLines = 1,
                                     )
-                                    // Weighted box: whatever height is left after the label and the icon, the slider
-                                    // centres inside it. A fixed-height popup used to overflow — 96dp of slider plus
-                                    // label, icon, spacing and padding came to 164dp in a 148dp popup, so the icon
-                                    // was swallowed and the track sat glued to the bottom edge.
                                     Box(
                                         modifier = Modifier.weight(1f).fillMaxWidth(),
                                         contentAlignment = Alignment.Center,
                                     ) {
                                         CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
-                                            // A vertical Slider is a horizontal one rotated a quarter
-                                            // turn: graphicsLayer rotates the drawing AND the pointer
-                                            // input, so drag direction follows the visual.
                                             Slider(
                                                 value = volumeValue,
                                                 onValueChangeFinished = {
@@ -1115,11 +997,6 @@ fun MiniPlayer(
                                                 modifier =
                                                     Modifier
                                                         .graphicsLayer {
-                                                            // transformOrigin(0, 0) and place(-width, 0) below are
-                                                            // a pair — they only work together. Dropping the origin
-                                                            // and centring the rotation leaves the slider drawn
-                                                            // outside its own node, where the popup's clip() eats
-                                                            // it and nothing shows at all.
                                                             rotationZ = 270f
                                                             transformOrigin = TransformOrigin(0f, 0f)
                                                         }.layout { measurable, constraints ->
@@ -1155,8 +1032,6 @@ fun MiniPlayer(
                                                     )
                                                 },
                                                 thumb = {
-                                                    // No thumb: it never sat visually centred on the rotated track, and the
-                                                    // slider drags the same without one — the active/inactive split marks the level.
                                                     Spacer(Modifier.size(0.dp))
                                                 },
                                             )
@@ -1189,12 +1064,6 @@ fun MiniPlayer(
 private val VOLUME_POPUP_HEIGHT = 180.dp
 private val VOLUME_SLIDER_LENGTH = 96.dp
 
-/**
- * The capsule player's progress bar: a real [Slider] so it can be dragged, drawn over a
- * buffered-position indicator. [trackHeight] and [thumbSize] are what make it read as a
- * hairline at rest and as a scrubber on hover — pass `thumbSize = 0.dp` to hide the thumb
- * without losing the drag target, which stays the full 16dp row height either way.
- */
 @Composable
 private fun CapsuleProgress(
     sliderValue: Float,
@@ -1212,21 +1081,7 @@ private fun CapsuleProgress(
         contentAlignment = Alignment.Center,
     ) {
         CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
-            // Buffering turns the track into an indeterminate sweep, the same language NowPlaying's
-            // scrubber uses. It REPLACES the slider rather than sitting under it: a
-            // LinearProgressIndicator underneath was tried here once and removed, because the Slider
-            // reserves room for its thumb at both ends while the indicator runs edge to edge, and
-            // the two tracks were visibly different lengths. Only one is ever on screen.
-            //
-            // Nothing here is gated on the platform — CapsuleProgress is only ever built by the
-            // Desktop arm of MiniPlayer. The Android arm swaps its play/pause button for a spinner
-            // instead, and reads the same `loading` flag to do it.
             Crossfade(targetState = loading, label = "capsuleProgress") { isLoading ->
-                // Both branches are boxed to the full height and centred, so the Crossfade's own
-                // Box never changes size. Its default alignment is TopStart and it measures to the
-                // tallest child currently visible — with a 2dp indicator against a Slider that is
-                // taller, the bar pins to the top of the box mid-transition and then drops to the
-                // middle when the Slider leaves composition. It reads as the track falling in.
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     if (isLoading) {
                         LinearProgressIndicator(
@@ -1235,16 +1090,12 @@ private fun CapsuleProgress(
                                     .fillMaxWidth()
                                     .height(trackHeight)
                                     .clip(RoundedCornerShape(8.dp)),
-                            // The capsule's own colours, not NowPlaying's hardcoded greys: this track
-                            // sits on liquid glass whose tone follows the artwork behind it.
                             color = progressColor,
                             trackColor = textColor.copy(alpha = 0.25f),
                             strokeCap = StrokeCap.Round,
                         )
                     } else {
                         Slider(
-                            // Fraction, not 0..100 — see the note in NowPlayingScreen: material3 alpha25
-                            // drops valueRange on its binary-compatibility overload.
                             value = sliderValue / 100f,
                             onValueChange = onValueChange,
                             onValueChangeFinished = onValueChangeFinished,
