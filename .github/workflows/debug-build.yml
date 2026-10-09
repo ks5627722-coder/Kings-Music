@@ -19,11 +19,15 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x ./gradlew
 
+      - name: Accept Android SDK Licenses
+        run: yes | sdkmanager --licenses
+
       - name: Build Debug APK
-        run: ./gradlew :composeApp:assembleDebug
+        run: ./gradlew assembleDebug --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: Kings-Music-Debug-APK
-          path: composeApp/build/outputs/apk/debug/*.apk
+          path: '**/build/outputs/apk/debug/*.apk'
+
